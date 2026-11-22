@@ -51,6 +51,15 @@ class MainActivity : Activity() {
         }
         col.addView(status)
 
+        col.addView(button("Full-screen draft (second screen / iPhone players)") {
+            startActivity(Intent(this, DraftActivity::class.java))
+        })
+        col.addView(TextView(this).apply {
+            text = "Floating bubble over the game (Android players):"
+            textSize = 13f
+            setTextColor(Color.parseColor("#9BA1B0"))
+            setPadding(0, 18.dp, 0, 0)
+        })
         col.addView(button("1. Allow \"Display over other apps\"") {
             startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
         })
