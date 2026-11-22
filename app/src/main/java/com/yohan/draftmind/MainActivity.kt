@@ -37,7 +37,7 @@ class MainActivity : Activity() {
             setTypeface(typeface, Typeface.BOLD)
         })
         col.addView(TextView(this).apply {
-            text = "Hero-pick helper for Mobile Legends. A floating DM bubble sits over the game; " +
+            text = "Hero-pick helper for Moba Legends: 5v5 / Mobile Legends. A floating DM bubble sits over the game; " +
                 "during the draft, tap it, add enemy picks, your team's picks and bans, and it suggests " +
                 "the best counter picks for your team."
             textSize = 14f
@@ -55,10 +55,7 @@ class MainActivity : Activity() {
             startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
         })
         col.addView(button("2. Start floating bubble") { startOverlay() })
-        col.addView(button("3. Open Mobile Legends") {
-            val i = packageManager.getLaunchIntentForPackage("com.mobile.legends")
-            if (i != null) startActivity(i) else Toast.makeText(this, "Mobile Legends not found", Toast.LENGTH_SHORT).show()
-        })
+        col.addView(button("3. Open Moba Legends / Mobile Legends") { openGame() })
         col.addView(button("Stop bubble") {
             startService(Intent(this, OverlayService::class.java).setAction(OverlayService.ACTION_STOP))
         })
@@ -91,7 +88,21 @@ class MainActivity : Activity() {
             return
         }
         startForegroundService(Intent(this, OverlayService::class.java))
-        Toast.makeText(this, "Bubble started — open Mobile Legends", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, "Bubble started — now open the game", Toast.LENGTH_SHORT).show()
+    }
+
+    /** Finds Moba Legends: 5v5 (India) or Mobile Legends: Bang Bang, whatever is installed. */
+    private fun openGame() {
+        packageManager.getLaunchIntentForPackage("com.mobile.legends")?.let { startActivity(it); return }
+        val launcher = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+        val match = packageManager.queryIntentActivities(launcher, 0).firstOrNull { ri ->
+            val label = ri.loadLabel(packageManager).toString().lowercase()
+            ("legends" in label && ("moba" in label || "mobile" in label)) || ri.activityInfo.packageName.contains("legends")
+        }
+        if (match != null) {
+            packageManager.getLaunchIntentForPackage(match.activityInfo.packageName)?.let { startActivity(it); return }
+        }
+        Toast.makeText(this, "Game not found - just open it yourself, the bubble works over any app", Toast.LENGTH_LONG).show()
     }
 
     private fun button(text: String, onClick: () -> Unit) = Button(this).apply {
