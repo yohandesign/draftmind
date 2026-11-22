@@ -21,6 +21,8 @@ import android.widget.Toast
 class MainActivity : Activity() {
 
     private lateinit var status: TextView
+    private lateinit var unblockCard: LinearLayout
+    private val prefs by lazy { getSharedPreferences("main", MODE_PRIVATE) }
     private val Int.dp: Int get() = (this * resources.displayMetrics.density).toInt()
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -61,8 +63,36 @@ class MainActivity : Activity() {
             setPadding(0, 18.dp, 0, 0)
         })
         col.addView(button("1. Allow \"Display over other apps\"") {
+            prefs.edit().putBoolean("triedOverlay", true).apply()
             startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
         })
+
+        // Android 13+ blocks this permission for apps installed from a file ("restricted settings").
+        unblockCard = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(16.dp, 14.dp, 16.dp, 14.dp)
+            background = GradientDrawable().apply { setColor(Color.parseColor("#3A2A12")); cornerRadius = 12.dp.toFloat()
+                setStroke(1.dp, Color.parseColor("#F5B83D")) }
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { topMargin = 10.dp }
+            visibility = android.view.View.GONE
+            addView(TextView(this@MainActivity).apply {
+                text = "Saw \"App was denied access\" / \"Restricted setting\"?"
+                textSize = 15f; setTextColor(Color.parseColor("#F5B83D")); setTypeface(typeface, Typeface.BOLD)
+            })
+            addView(TextView(this@MainActivity).apply {
+                text = "Android blocks this for apps not installed from Play Store. To unblock:\n\n" +
+                    "1. Tap the button below (opens DraftMind's App info)\n" +
+                    "2. Tap ⋮ (top-right corner)\n" +
+                    "3. Tap \"Allow restricted settings\" and confirm with PIN/fingerprint\n" +
+                    "4. Come back here and tap step 1 again\n\n" +
+                    "No ⋮ menu? Try step 1 once first, then come back — the option appears only after Android blocks it once."
+                textSize = 13.5f; setTextColor(Color.parseColor("#E8E2D4")); setPadding(0, 6.dp, 0, 0)
+            })
+            addView(button("Open App info to unblock") {
+                startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
+            })
+        }
+        col.addView(unblockCard)
         col.addView(button("2. Start floating bubble") { startOverlay() })
         col.addView(button("3. Open Moba Legends / Mobile Legends") { openGame() })
         col.addView(button("Stop bubble") {
@@ -88,7 +118,10 @@ class MainActivity : Activity() {
 
     override fun onResume() {
         super.onResume()
-        status.text = if (Settings.canDrawOverlays(this)) "✅ Overlay permission granted" else "⚠️ Overlay permission needed (step 1)"
+        val granted = Settings.canDrawOverlays(this)
+        status.text = if (granted) "✅ Overlay permission granted" else "⚠️ Overlay permission needed (step 1)"
+        unblockCard.visibility = if (!granted && Build.VERSION.SDK_INT >= 33 && prefs.getBoolean("triedOverlay", false))
+            android.view.View.VISIBLE else android.view.View.GONE
     }
 
     private fun startOverlay() {
