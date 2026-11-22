@@ -397,13 +397,35 @@ class OverlayService : Service() {
 
     private fun buildSuggestions() {
         suggestBox.removeAllViews()
+        if (mode == Mode.BAN) {
+            suggestBox.addView(label("Suggested bans", 12f, Mode.BAN.color, bold = true))
+            engine.suggestBans(allies, enemies, bans).forEachIndexed { i, s -> suggestBox.addView(suggestionCard(i, s), lp(ViewGroup.LayoutParams.MATCH_PARENT, top = 4)) }
+            suggestBox.addView(label("Switch to Enemy / My team to see pick suggestions.", 10f, textDim), lp(top = 6))
+            return
+        }
         val sugg = engine.suggest(allies, enemies, bans, myLane)
+        val enemyLeft = 5 - enemies.size
+        if (allies.isNotEmpty() || enemies.isNotEmpty()) {
+            suggestBox.addView(label(
+                if (enemyLeft > 0) "Enemy has $enemyLeft pick(s) left — favouring safe picks" else "Enemy is done — pure counter-pick",
+                10f, textDim))
+        }
         if (enemies.isEmpty() && allies.isEmpty()) {
             suggestBox.addView(label("Strongest heroes right now — good picks or bans:", 10.5f, textDim))
         } else if (sugg.isEmpty()) {
             suggestBox.addView(label("No strong pick yet for this lane — add more picks or change My lane.", 11f, textDim))
         }
-        sugg.forEachIndexed { i, s ->
+        sugg.forEachIndexed { i, s -> suggestBox.addView(suggestionCard(i, s), lp(ViewGroup.LayoutParams.MATCH_PARENT, top = 4)) }
+        val avoid = engine.avoid(allies, enemies, bans, myLane)
+        if (avoid.isNotEmpty()) {
+            suggestBox.addView(label("Avoid", 12f, Mode.ENEMY.color, bold = true), lp(top = 8))
+            avoid.forEach { (h, by) ->
+                suggestBox.addView(label("${h.name} — countered by ${by.joinToString(", ") { it.name }}", 10.5f, textDim))
+            }
+        }
+    }
+
+    private fun suggestionCard(i: Int, s: Suggestion): View {
             val box = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
                 background = rounded(card, 10)
@@ -414,15 +436,7 @@ class OverlayService : Service() {
             title.addView(label("%.1f".format(s.score), 11f, accent, bold = true))
             box.addView(title, lp(ViewGroup.LayoutParams.MATCH_PARENT))
             box.addView(label(s.hero.lanes.joinToString("/") + " · " + s.reasons.take(3).joinToString(" · "), 10.5f, textDim))
-            suggestBox.addView(box, lp(ViewGroup.LayoutParams.MATCH_PARENT, top = 4))
-        }
-        val avoid = engine.avoid(allies, enemies, bans, myLane)
-        if (avoid.isNotEmpty()) {
-            suggestBox.addView(label("Avoid", 12f, Mode.ENEMY.color, bold = true), lp(top = 8))
-            avoid.forEach { (h, by) ->
-                suggestBox.addView(label("${h.name} — countered by ${by.joinToString(", ") { it.name }}", 10.5f, textDim))
-            }
-        }
+            return box
     }
 
     private fun buildGrid() {

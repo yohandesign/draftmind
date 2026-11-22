@@ -86,6 +86,17 @@ class DraftEngine(private val heroes: List<Hero>) {
             losesTo.forEach { e -> score -= weight(c.counteredBy.indexOf(e.name)) }
             if (beats.isNotEmpty()) reasons.add("Counters " + beats.joinToString(", ") { it.name })
 
+            // Pick order: can the enemy still counter-pick us?
+            val enemyLeft = 5 - enemies.size
+            val openCounters = c.counteredBy.count { it !in taken }
+            if (enemyLeft > 0) {
+                score -= 0.35 * openCounters
+                if (openCounters <= 1) { score += 0.5; reasons.add("Safe pick: its counters are banned/taken") }
+            } else if (beats.isNotEmpty()) {
+                beats.forEach { e -> score += 0.5 * weight(e.counteredBy.indexOf(c.name)) }
+                reasons.add("Last pick: enemy can't answer")
+            }
+
             // Current meta strength
             score += (c.win - 50.0) * 0.3
             if (c.win >= 52.0) reasons.add("Strong now: %.1f%% win".format(c.win))
@@ -158,6 +169,25 @@ class DraftEngine(private val heroes: List<Hero>) {
             .filter { it.second.size >= 2 }
             .sortedByDescending { it.second.size }
             .take(3)
+    }
+
+    /**
+     * Ban suggestions: heroes that counter what my team already picked,
+     * heroes that are overpowered right now, and strong fits for the enemy's open lanes.
+     */
+    fun suggestBans(allies: List<Hero>, enemies: List<Hero>, bans: List<Hero>, limit: Int = 5): List<Suggestion> {
+        val taken = (allies + enemies + bans).map { it.name }.toSet()
+        val enemyOpen = HeroRepo.LANES.filter { it !in assignLanes(enemies) }
+        return heroes.filter { it.name !in taken }.map { c ->
+            var score = (c.win - 50.0) * 0.5 + c.ban * 0.03
+            val reasons = ArrayList<String>()
+            val threatens = allies.filter { c.name in it.counteredBy }
+            threatens.forEach { a -> score += weight(a.counteredBy.indexOf(c.name)) }
+            if (threatens.isNotEmpty()) reasons.add("Counters your " + threatens.joinToString(", ") { it.name })
+            if (enemies.isNotEmpty() && c.lanes.any { it in enemyOpen }) score += 0.5
+            if (c.win >= 52.0 || c.ban >= 20.0) reasons.add("%.1f%% win · %.0f%% ban rate".format(c.win, c.ban))
+            Suggestion(c, score, reasons)
+        }.sortedByDescending { it.score }.take(limit)
     }
 
     /** 1st listed counter is the strongest. */
