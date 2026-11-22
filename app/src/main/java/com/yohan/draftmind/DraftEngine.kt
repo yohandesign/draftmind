@@ -8,8 +8,12 @@ data class Hero(
     val lanes: List<String>,
     val dmg: String,
     val tags: Set<String>,
-    val strong: Set<String>,
-    val syn: Set<String>
+    val syn: Set<String>,
+    val win: Double,
+    val pick: Double,
+    val ban: Double,
+    /** Official "counter hero" list for this hero, strongest counter first. */
+    val counteredBy: List<String>
 )
 
 data class Suggestion(val hero: Hero, val score: Double, val reasons: List<String>)
@@ -29,8 +33,11 @@ object HeroRepo {
                     lanes = o.getJSONArray("lanes").toList(),
                     dmg = o.optString("dmg", "P"),
                     tags = o.getJSONArray("tags").toList().toSet(),
-                    strong = o.getJSONArray("strong").toList().toSet(),
-                    syn = o.getJSONArray("syn").toList().toSet()
+                    syn = o.getJSONArray("syn").toList().toSet(),
+                    win = o.optDouble("win", 50.0),
+                    pick = o.optDouble("pick", 0.0),
+                    ban = o.optDouble("ban", 0.0),
+                    counteredBy = o.optJSONArray("counteredBy")?.toList() ?: emptyList()
                 )
             )
         }
@@ -54,7 +61,7 @@ class DraftEngine(private val heroes: List<Hero>) {
         myLane: String?,
         limit: Int = 5
     ): List<Suggestion> {
-        if (allies.isEmpty() && enemies.isEmpty()) return emptyList()
+        if (allies.isEmpty() && enemies.isEmpty()) return metaPicks(bans, myLane, limit)
         val taken = (allies + enemies + bans).map { it.name }.toSet()
         val filledLanes = assignLanes(allies)
         val missingLanes = HeroRepo.LANES.filter { it !in filledLanes }
@@ -72,12 +79,16 @@ class DraftEngine(private val heroes: List<Hero>) {
             var score = 0.0
             val reasons = ArrayList<String>()
 
-            // 1) Direct counters
-            val beats = enemies.filter { it.name in c.strong }
-            val losesTo = enemies.filter { c.name in it.strong }
-            score += 2.5 * beats.size
-            score -= 2.5 * losesTo.size
+            // 1) Direct counters (official data: who counters whom)
+            val beats = enemies.filter { c.name in it.counteredBy }
+            val losesTo = enemies.filter { it.name in c.counteredBy }
+            beats.forEach { e -> score += weight(e.counteredBy.indexOf(c.name)) }
+            losesTo.forEach { e -> score -= weight(c.counteredBy.indexOf(e.name)) }
             if (beats.isNotEmpty()) reasons.add("Counters " + beats.joinToString(", ") { it.name })
+
+            // Current meta strength
+            score += (c.win - 50.0) * 0.3
+            if (c.win >= 52.0) reasons.add("Strong now: %.1f%% win".format(c.win))
 
             // 2) Counters by play style
             if (et("dash") > 0 && "antidash" in c.tags) {
@@ -143,10 +154,23 @@ class DraftEngine(private val heroes: List<Hero>) {
         val taken = (allies + enemies + bans).map { it.name }.toSet()
         return heroes
             .filter { it.name !in taken && (myLane == null || myLane in it.lanes) }
-            .map { c -> c to enemies.filter { c.name in it.strong } }
+            .map { c -> c to enemies.filter { it.name in c.counteredBy } }
             .filter { it.second.size >= 2 }
             .sortedByDescending { it.second.size }
             .take(3)
+    }
+
+    /** 1st listed counter is the strongest. */
+    private fun weight(pos: Int) = 3.0 - 0.4 * pos.coerceIn(0, 4)
+
+    /** Before anyone has picked: strongest heroes right now (also good ban targets). */
+    private fun metaPicks(bans: List<Hero>, myLane: String?, limit: Int): List<Suggestion> {
+        val banned = bans.map { it.name }.toSet()
+        return heroes.filter { it.name !in banned && (myLane == null || myLane in it.lanes) }
+            .map { h -> Suggestion(h, (h.win - 50.0) + h.ban * 0.05,
+                listOf("%.1f%% win · %.1f%% ban rate".format(h.win, h.ban))) }
+            .sortedByDescending { it.score }
+            .take(limit)
     }
 
     /** Greedy lane guess for already-picked allies (fewest lane options first). */

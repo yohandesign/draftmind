@@ -398,11 +398,10 @@ class OverlayService : Service() {
     private fun buildSuggestions() {
         suggestBox.removeAllViews()
         val sugg = engine.suggest(allies, enemies, bans, myLane)
-        if (sugg.isEmpty()) {
-            suggestBox.addView(label(
-                if (enemies.isEmpty() && allies.isEmpty()) "Add enemy or team picks to get suggestions."
-                else "No strong pick yet for this lane — add more picks or change My lane.",
-                11f, textDim))
+        if (enemies.isEmpty() && allies.isEmpty()) {
+            suggestBox.addView(label("Strongest heroes right now — good picks or bans:", 10.5f, textDim))
+        } else if (sugg.isEmpty()) {
+            suggestBox.addView(label("No strong pick yet for this lane — add more picks or change My lane.", 11f, textDim))
         }
         sugg.forEachIndexed { i, s ->
             val box = LinearLayout(this).apply {
